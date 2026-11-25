@@ -1,0 +1,2922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FirmwareLens: Firmware Entropy &amp; Binwalk-Style Analysis Online</title>
+  <meta name="description" content="Free, offline-capable browser tool for IoT firmware triage. Compute Shannon entropy, scan file signatures, extract strings, and inspect hex—100% locally." />
+  <meta name="author" content="Shrijeet Singh" />
+  <link rel="canonical" href="https://shrijeetdev.github.io/firmware-lens/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="FirmwareLens: Firmware Entropy &amp; Binwalk-Style Analysis Online" />
+  <meta property="og:description" content="Client-side binwalk-style firmware triage: Shannon entropy plots, magic signature scanning, string extraction, and hex inspection in your browser." />
+  <meta property="og:url" content="https://shrijeetdev.github.io/firmware-lens/" />
+  <meta property="og:site_name" content="FirmwareLens" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="FirmwareLens: Firmware Entropy &amp; Binwalk-Style Analysis Online" />
+  <meta name="twitter:description" content="Analyze router, camera, and IoT firmware images locally in your browser with zero uploads." />
+
+  <!-- Inline SVG Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230D1117'/%3E%3Crect x='4' y='4' width='56' height='56' rx='11' fill='none' stroke='%2330363D' stroke-width='2'/%3E%3Cpath d='M12 44 L22 44 L26 20 L32 36 L38 16 L43 44 L52 44' fill='none' stroke='%233FB950' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='38' cy='16' r='3.5' fill='%2315E0ED'/%3E%3C/svg%3E" />
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "FirmwareLens",
+    "url": "https://shrijeetdev.github.io/firmware-lens/",
+    "applicationCategory": "SecurityApplication",
+    "operatingSystem": "Web Browser",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Shrijeet Singh",
+      "url": "https://github.com/shrijeetdev"
+    },
+    "description": "Browser-based firmware entropy analysis, magic signature scanning, and string triage tool for IoT security researchers."
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #0D1117;
+      --surface: #161B22;
+      --surface-elevated: #1C2128;
+      --border: #30363D;
+      --text: #E6EDF3;
+      --muted: #8B949E;
+      --accent: #3FB950;
+      --accent-dim: rgba(63, 185, 80, 0.14);
+      --accent2: #15E0ED;
+      --accent2-dim: rgba(21, 224, 237, 0.12);
+      --danger: #F85149;
+      --danger-dim: rgba(248, 81, 73, 0.14);
+      --warn: #D29922;
+      --warn-dim: rgba(210, 153, 34, 0.14);
+      --radius: 12px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg: #F6F8FA;
+        --surface: #FFFFFF;
+        --surface-elevated: #F0F3F6;
+        --border: #D0D7DE;
+        --text: #1F2328;
+        --muted: #656D76;
+        --accent: #1A7F37;
+        --accent-dim: rgba(26, 127, 55, 0.12);
+        --accent2: #0969DA;
+        --accent2-dim: rgba(9, 105, 218, 0.10);
+        --danger: #CF222E;
+        --danger-dim: rgba(207, 34, 46, 0.10);
+        --warn: #9A6700;
+        --warn-dim: rgba(154, 103, 0, 0.12);
+      }
+    }
+
+    :root[data-theme="light"] {
+      --bg: #F6F8FA;
+      --surface: #FFFFFF;
+      --surface-elevated: #F0F3F6;
+      --border: #D0D7DE;
+      --text: #1F2328;
+      --muted: #656D76;
+      --accent: #1A7F37;
+      --accent-dim: rgba(26, 127, 55, 0.12);
+      --accent2: #0969DA;
+      --accent2-dim: rgba(9, 105, 218, 0.10);
+      --danger: #CF222E;
+      --danger-dim: rgba(207, 34, 46, 0.10);
+      --warn: #9A6700;
+      --warn-dim: rgba(154, 103, 0, 0.12);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    body {
+      margin: 0;
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--accent2);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    /* Focus visibility */
+    :focus-visible {
+      outline: 2px solid var(--accent2);
+      outline-offset: 2px;
+    }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 20px 0;
+    }
+
+    .header-inner {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .brand-title-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-mark {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+    }
+
+    .pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .brand-sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 8px 14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface-elevated);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+      text-decoration: none;
+    }
+
+    .btn:hover:not(:disabled) {
+      border-color: var(--accent2);
+      text-decoration: none;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0D1117;
+    }
+
+    :root[data-theme="light"] .btn-primary {
+      color: #FFFFFF;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) .btn-primary {
+        color: #FFFFFF;
+      }
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      filter: brightness(1.08);
+      border-color: var(--accent);
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 0.8rem;
+      border-radius: 8px;
+    }
+
+    /* Main Layout */
+    main {
+      padding: 24px 0 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Dropzone */
+    .dropzone-card {
+      background: var(--surface);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 32px 20px;
+      text-align: center;
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+      cursor: pointer;
+    }
+
+    .dropzone-card:hover,
+    .dropzone-card.dragover {
+      border-color: var(--accent2);
+      background: var(--accent2-dim);
+    }
+
+    .dropzone-icon {
+      width: 44px;
+      height: 44px;
+      margin: 0 auto 12px;
+      color: var(--accent2);
+    }
+
+    .dropzone-title {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin: 0 0 6px;
+    }
+
+    .dropzone-hint {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin: 0 0 18px;
+    }
+
+    .dropzone-controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    /* Progress Bar */
+    .progress-wrap {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+    }
+
+    .progress-wrap.active {
+      display: block;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.875rem;
+      margin-bottom: 8px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      background: var(--surface-elevated);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width 0.12s linear;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      display: none;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+    }
+
+    .toolbar.active {
+      display: flex;
+    }
+
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .file-badge {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 8px;
+      word-break: break-all;
+    }
+
+    /* Summary Cards */
+    .summary-grid {
+      display: none;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      ```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FirmwareLens: Firmware Entropy &amp; Binwalk-Style Analysis Online</title>
+  <meta name="description" content="Client-side IoT firmware entropy graph, binwalk-style signature scanner, string triage, and hex viewer. Runs 100% locally in your browser." />
+  <meta name="author" content="Shrijeet Singh" />
+  <link rel="canonical" href="https://shrijeetdev.github.io/firmware-lens/" />
+
+  <!-- Open Graph / Twitter -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="FirmwareLens: Firmware Entropy &amp; Binwalk-Style Analysis Online" />
+  <meta property="og:description" content="Client-side IoT firmware entropy graph, binwalk-style signature scanner, string triage, and hex viewer. Runs 100% locally in your browser." />
+  <meta property="og:url" content="https://shrijeetdev.github.io/firmware-lens/" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="FirmwareLens: Firmware Entropy &amp; Binwalk-Style Analysis Online" />
+  <meta name="twitter:description" content="Client-side IoT firmware entropy graph, binwalk-style signature scanner, string triage, and hex viewer. Runs 100% locally in your browser." />
+
+  <!-- Inline SVG Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230D1117'/%3E%3Crect x='4' y='4' width='56' height='56' rx='11' fill='none' stroke='%233FB950' stroke-width='3'/%3E%3Cpath d='M12 44 L22 24 L30 36 L40 16 L52 38' fill='none' stroke='%2315E0ED' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='40' cy='16' r='3.5' fill='%233FB950'/%3E%3C/svg%3E" />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "FirmwareLens",
+    "applicationCategory": "SecurityApplication",
+    "operatingSystem": "Web Browser",
+    "url": "https://shrijeetdev.github.io/firmware-lens/",
+    "description": "Binwalk-style firmware triage, Shannon entropy visualization, magic byte signature scanning, and string analysis running 100% locally in the browser.",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": {
+      "@type": "Person",
+      "name": "Shrijeet Singh",
+      "url": "https://github.com/shrijeetdev"
+    }
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #0D1117;
+      --surface: #161B22;
+      --surface-alt: #1C2128;
+      --border: #30363D;
+      --text: #E6EDF3;
+      --muted: #8B949E;
+      --accent: #3FB950;
+      --accent2: #15E0ED;
+      --danger: #F85149;
+      --warn: #D29922;
+      --shadow: 0 8px 24px rgba(1, 4, 9, 0.45);
+      --radius: 12px;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg: #F6F8FA;
+        --surface: #FFFFFF;
+        --surface-alt: #F0F3F6;
+        --border: #D0D7DE;
+        --text: #1F2328;
+        --muted: #59636E;
+        --accent: #1A7F37;
+        --accent2: #0969DA;
+        --danger: #CF222E;
+        --warn: #9A6700;
+        --shadow: 0 8px 24px rgba(31, 35, 40, 0.08);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.55;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--accent2);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    button, select, input {
+      font-family: inherit;
+      font-size: inherit;
+      color: inherit;
+    }
+
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible,
+    a:focus-visible,
+    [tabindex]:focus-visible {
+      outline: 2px solid var(--accent2);
+      outline-offset: 2px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 18px;
+    }
+
+    /* Header */
+    header.site-header {
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 18px 0;
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .brand-title-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .brand-logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    .brand-logo svg {
+      width: 26px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+
+    .privacy-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: rgba(63, 185, 80, 0.14);
+      color: var(--accent);
+      border: 1px solid rgba(63, 185, 80, 0.35);
+    }
+
+    .privacy-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .value-prop {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 8px 14px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface-alt);
+      color: var(--text);
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+      text-decoration: none;
+    }
+
+    .btn:hover {
+      border-color: var(--accent2);
+      text-decoration: none;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0D1117;
+      border-color: var(--accent);
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.06);
+      border-color: var(--accent);
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 0.82rem;
+      border-radius: 8px;
+    }
+
+    /* Main Workspace */
+    main {
+      padding: 24px 0 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+
+    .badge-accent {
+      color: var(--accent);
+      border-color: rgba(63, 185, 80, 0.4);
+      background: rgba(63, 185, 80, 0.12);
+    }
+
+    .badge-warn {
+      color: var(--warn);
+      border-color: rgba(210, 153, 34, 0.45);
+      background: rgba(210, 153, 34, 0.14);
+    }
+
+    .badge-danger {
+      color: var(--danger);
+      border-color: rgba(248, 81, 73, 0.45);
+      background: rgba(248, 81, 73, 0.14);
+    }
+
+    .badge-info {
+      color: var(--accent2);
+      border-color: rgba(21, 224, 237, 0.4);
+      background: rgba(21, 224, 237, 0.12);
+    }
+
+    /* Dropzone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 28px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .dropzone:hover,
+    .dropzone.dragover {
+      border-color: var(--accent2);
+      background: var(--surface-alt);
+    }
+
+    .dropzone-icon {
+      color: var(--accent2);
+      margin-bottom: 8px;
+    }
+
+    .dropzone-title {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .dropzone-sub {
+      color: var(--muted);
+      font-size: 0.86rem;
+      margin-bottom: 14px;
+    }
+
+    .dropzone-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Progress Bar */
+    .progress-wrap {
+      display: none;
+      margin-top: 14px;
+      text-align: left;
+    }
+
+    .progress-wrap.active {
+      display: block;
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-family: var(--font-mono);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      transition: width 0.12s linear;
+    }
+
+    /* Summary Grid */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .summary-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 520px) {
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .stat-box {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 13px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .stat-label {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .stat-value {
+      font-family: var(--font-mono);
+      font-size: 1.02rem;
+      font-weight: 700;
+      word-break: break-all;
+    }
+
+    .stat-sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .verdict-banner {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface-alt);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* Entropy Canvas */
+    .controls-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    select, input[type="text"], input[type="number"] {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
+      color: var(--text);
+      font-size: 0.85rem;
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      height: 240px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      overflow: hidden;
+      cursor: crosshair;
+    }
+
+    canvas#entropyCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .canvas-tooltip {
+      position: absolute;
+      pointer-events: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      box-shadow: var(--shadow);
+      display: none;
+      z-index: 5;
+      white-space: nowrap;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 10px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .legend-items {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .edges-list {
+      margin-top: 14px;
+      border-top: 1px solid var(--border);
+      padding-top: 12px;
+    }
+
+    .edges-title {
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .edge-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .edge-chip {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      padding: 4px 9px;
+      border-radius: 6px;
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .edge-chip:hover {
+      border-color: var(--accent2);
+    }
+
+    /* Tables */
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      max-height: 380px;
+      overflow-y: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.86rem;
+      text-align: left;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface-alt);
+      border-bottom: 1px solid var(--border);
+      padding: 9px 12px;
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      z-index: 2;
+    }
+
+    tbody td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background: var(--surface-alt);
+    }
+
+    .offset-link {
+      font-family: var(--font-mono);
+      color: var(--accent2);
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      text-decoration: underline;
+      font-weight: 600;
+    }
+
+    .offset-link:hover {
+      color: var(--accent);
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+    }
+
+    .string-preview {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      word-break: break-all;
+      max-width: 640px;
+    }
+
+    /* Hex Viewer Panel */
+    .hex-grid {
+      display: grid;
+      grid-template-columns: 110px 1fr 200px;
+      gap: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.65;
+      overflow-x: auto;
+    }
+
+    @media (max-width: 720px) {
+      .hex-grid {
+        grid-template-columns: 88px 1fr;
+      }
+      .hex-ascii-col {
+        grid-column: 1 / -1;
+        border-top: 1px dashed var(--border);
+        padding-top: 8px;
+      }
+    }
+
+    .hex-col-header {
+      color: var(--muted);
+      font-size: 0.74rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+      user-select: none;
+    }
+
+    .hex-row {
+      white-space: pre;
+    }
+
+    .hex-byte-zero {
+      color: var(--muted);
+      opacity: 0.65;
+    }
+
+    .hex-byte-print {
+      color: var(--accent);
+    }
+
+    .hex-byte-high {
+      color: var(--accent2);
+    }
+
+    .hex-byte-focus {
+      background: rgba(21, 224, 237, 0.25);
+      border-radius: 3px;
+      outline: 1px solid var(--accent2);
+    }
+
+    /* Docs / FAQ */
+    .info-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 820px) {
+      .info-section {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .info-section h2 {
+      font-size: 1.15rem;
+      margin-bottom: 10px;
+    }
+
+    .info-section p {
+      color: var(--muted);
+      margin-bottom: 10px;
+      font-size: 0.92rem;
+    }
+
+    .steps-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .steps-list li {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 13px;
+      font-size: 0.9rem;
+    }
+
+    .steps-list strong {
+      color: var(--text);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    details.faq-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-alt);
+      margin-bottom: 9px;
+      padding: 10px 14px;
+    }
+
+    details.faq-item summary {
+      font-weight: 600;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    details.faq-item summary::-webkit-details-marker {
+      display: none;
+    }
+
+    details.faq-item summary::after {
+      content: "+";
+      font-family: var(--font-mono);
+      color: var(--accent2);
+      font-weight: 700;
+    }
+
+    details.faq-item[open] summary::after {
+      content: "−";
+    }
+
+    details.faq-item p {
+      margin-top: 8px;
+      margin-bottom: 0;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    /* Footer */
+    footer.site-footer {
+      border-top: 1px solid var(--border);
+      padding: 22px 0;
+      color: var(--muted);
+      font-size: 0.88rem;
+      text-align: center;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 24px 12px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <div class="brand-block">
+        <div class="brand-title-row">
+          <span class="brand-logo">
+            <svg viewBox="0 0 64 64" aria-hidden="true">
+              <rect x="4" y="4" width="56" height="56" rx="12" fill="none" stroke="currentColor" stroke-width="4" />
+              <path d="M12 44 L22 24 L30 36 L40 16 L52 38" fill="none" stroke="#15E0ED" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+              <circle cx="40" cy="16" r="4" fill="#3FB950" />
+            </svg>
+            FirmwareLens
+          </span>
+          <span class="privacy-pill" aria-label="Privacy guarantee: Runs 100% in your browser">
+            <span class="privacy-dot" aria-hidden="true"></span>
+            Runs 100% in your browser
+          </span>
+        </div>
+        <p class="value-prop">Binwalk-style firmware entropy graph, magic signature scanner, string triage &amp; hex inspector for IoT security research.</p>
+      </div>
+      <div class="header-actions">
+        <a class="btn" href="https://github.com/shrijeetdev/firmware-lens" target="_blank" rel="noopener noreferrer" aria-label="Star FirmwareLens on GitHub">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/>
+          </svg>
+          Star on GitHub
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- File Input / Dropzone -->
+    <section aria-label="Firmware File Loader">
+      <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="Drop a firmware image here or press Enter to browse files">
+        <div class="dropzone-icon" aria-hidden="true">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <div class="dropzone-title">Drop firmware image here (.bin, .img, .trx, .chk, router/camera dumps)</div>
+        <div class="dropzone-sub">Streamed in chunks &amp; analysed in a background Web Worker — zero bytes leave your machine.</div>
+        <div class="dropzone-actions">
+          <button type="button" id="browseBtn" class="btn btn-primary">Select Firmware File</button>
+          <button type="button" id="sampleBtn" class="btn">Try a sample</button>
+        </div>
+        <input type="file" id="fileInput" class="hidden" aria-hidden="true" />
+
+        <div id="progressWrap" class="progress-wrap" aria-live="polite">
+          <div class="progress-meta">
+            <span id="progressStatus">Initializing worker...</span>
+            <span id="progressPct">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analysis Workspace (hidden until a file or sample is loaded) -->
+    <div id="workspace" class="hidden" style="display:flex; flex-direction:column; gap:20px;">
+      <!-- Panel 7: Summary Card & Exports -->
+      <section class="card" aria-labelledby="summaryHeading">
+        <div class="card-header">
+          <h2 id="summaryHeading" class="card-title">
+            Triage Summary
+            <span id="fileNameBadge" class="badge">firmware.bin</span>
+          </h2>
+          <div class="controls-row">
+            <button type="button" id="exportJsonBtn" class="btn btn-sm">Export JSON</button>
+            <button type="button" id="exportMdBtn" class="btn btn-sm">Export Markdown</button>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div class="stat-box">
+            <span class="stat-label">File Size</span>
+            <span id="statSize" class="stat-value">—</span>
+            <span id="statSizeBytes" class="stat-sub">—</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Overall Shannon Entropy</span>
+            <span id="statEntropy" class="stat-value">—</span>
+            <span class="stat-sub">Scale: 0.000 (uniform) – 8.000 (random)</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Signatures / Findings</span>
+            <span id="statCounts" class="stat-value">—</span>
+            <span id="statCountsSub" class="stat-sub">—</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">SHA-256 Digest</span>
+            <span id="statSha256" class="stat-value" style="font-size:0.82rem;">Computing...</span>
+            <span class="stat-sub">Computed via WebCrypto API</span>
+          </div>
+        </div>
+
+        <div id="verdictBanner" class="verdict-banner">
+          <div>
+            <strong id="verdictTitle">Encryption / Packing Assessment: —</strong>
+            <p id="verdictDesc" style="color:var(--muted); font-size:0.88rem; margin-top:2px;">—</p>
+          </div>
+          <span id="verdictBadge" class="badge">—</span>
+        </div>
+      </section>
+
+      <!-- Panel 1: Entropy Graph -->
+      <section class="card" aria-labelledby="entropyHeading">
+        <div class="card-header">
+          <h2 id="entropyHeading" class="card-title">
+            Shannon Entropy Distribution
+            <span id="blockCountBadge" class="badge">0 blocks</span>
+          </h2>
+          <div class="controls-row">
+            <label for="blockSizeSelect" style="font-size:0.84rem; color:var(--muted);">Block Size:</label>
+            <select id="blockSizeSelect" aria-label="Entropy block size">
+              <option value="256">256 B</option>
+              <option value="512">512 B</option>
+              <option value="1024">1 KB</option>
+              <option value="4096" selected>4 KB (Auto)</option>
+              <option value="16384">16 KB</option>
+              <option value="65536">64 KB</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="canvas-container" id="canvasContainer">
+          <canvas id="entropyCanvas" aria-label="Shannon entropy line chart across firmware file offsets"></canvas>
+          <div id="canvasTooltip" class="canvas-tooltip" role="tooltip"></div>
+        </div>
+
+        <div class="legend-row">
+          <div class="legend-items">
+            <span class="legend-item"><span class="swatch" style="background:rgba(63,185,80,0.35); border:1px solid #3FB950;"></span>Low (&lt; 3.5): Padding / ASCII / Sparse</span>
+            <span class="legend-item"><span class="swatch" style="background:rgba(21,224,237,0.35); border:1px solid #15E0ED;"></span>Medium (3.5 – 6.8): Machine Code / Structured Data</span>
+            <span class="legend-item"><span class="swatch" style="background:rgba(248,81,73,0.35); border:1px solid #F85149;"></span>High (&gt; 6.8): Compressed / Encrypted</span>
+          </div>
+          <span>Click graph or edge chips to inspect bytes</span>
+        </div>
+
+        <div class="edges-list">
+          <div class="edges-title">Detected Entropy Edges (Significant Transitions &Delta; &ge; 2.2 bits)</div>
+          <div id="edgeChips" class="edge-chips"></div>
+        </div>
+      </section>
+
+      <!-- Panel 2: Signature Scan -->
+      <section class="card" aria-labelledby="sigHeading">
+        <div class="card-header">
+          <h2 id="sigHeading" class="card-title">
+            Validated Signature Scan
+            <span id="sigCountBadge" class="badge">0 hits</span>
+          </h2>
+          <div class="controls-row">
+            <input type="text" id="sigFilterInput" placeholder="Filter signatures (e.g. SquashFS, ELF, uImage)..." aria-label="Filter signature results" />
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Hex Offset</th>
+                <th>Decimal</th>
+                <th>Signature / Format</th>
+                <th>Validated Header Metadata</th>
+              </tr>
+            </thead>
+            <tbody id="sigTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Panel 3: Interesting Strings -->
+      <section class="card" aria-labelledby="stringsHeading">
+        <div class="card-header">
+          <h2 id="stringsHeading" class="card-title">
+            Interesting ASCII Strings
+            <span id="strCountBadge" class="badge">0 matches</span>
+          </h2>
+          <div class="controls-row">
+            <label for="minStrLen" style="font-size:0.84rem; color:var(--muted);">Min Len:</label>
+            <input type="number" id="minStrLen" value="6" min="4" max="64" style="width:68px;" aria-label="Minimum string length" />
+            <select id="strCategoryFilter" aria-label="Filter strings by security category">
+              <option value="ALL">All Categories</option>
+              <option value="HIGHLIGHTED">All Highlighted Findings</option>
+              <option value="CREDENTIALS">Credentials / Shadow / Keys</option>
+              <option value="NETWORK">URLs / IPv4 / Services</option>
+              <option value="SYSTEM">BusyBox / Dropbear / Telnetd</option>
+              <option value="GENERAL">General ASCII Strings</option>
+            </select>
+            <input type="text" id="strSearchInput" placeholder="Search strings..." aria-label="Search extracted strings" />
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Hex Offset</th>
+                <th>Category</th>
+                <th>Extracted String</th>
+              </tr>
+            </thead>
+            <tbody id="strTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Panel 4: 256-Byte Hex & ASCII Inspector -->
+      <section class="card" id="hexCard" aria-labelledby="hexHeading">
+        <div class="card-header">
+          <h2 id="hexHeading" class="card-title">
+            Hex &amp; ASCII Inspector (256-Byte Window)
+            <span id="hexOffsetBadge" class="badge">0x00000000</span>
+          </h2>
+          <div class="controls-row">
+            <button type="button" id="hexPrevBtn" class="btn btn-sm" aria-label="Previous 256 bytes">&larr; -256B</button>
+            <input type="text" id="hexJumpInput" placeholder="0x0 or decimal" style="width:130px; font-family:var(--font-mono);" aria-label="Jump to hex or decimal offset" />
+            <button type="button" id="hexJumpBtn" class="btn btn-sm">Jump</button>
+            <button type="button" id="hexNextBtn" class="btn btn-sm" aria-label="Next 256 bytes">+256B &rarr;</button>
+          </div>
+        </div>
+
+        <div id="hexViewer" class="hex-grid" tabindex="0" aria-label="256-byte hexadecimal and ASCII byte dump"></div>
+      </section>
+    </div>
+
+    <!-- How It Works & FAQ -->
+    <section class="info-section" aria-label="Documentation and Frequently Asked Questions">
+      <div class="card">
+        <h2>How FirmwareLens Works</h2>
+        <p>FirmwareLens brings classic embedded firmware triage workflows directly into a zero-backend browser application:</p>
+        <ul class="steps-list">
+          <li>
+            <strong>1. Chunked File Streaming &amp; Web Worker</strong>
+            Your binary is sliced in 4 MB chunks via the File API and processed inside an isolated Web Worker created from an inline Blob, keeping the UI responsive even on multi-hundred-megabyte flash dumps.
+          </li>
+          <li>
+            <strong>2. Sliding-Window Shannon Entropy</strong>
+            Byte frequency histograms are computed per block (256 B to 64 KB) using $H = -\sum p_i \log_2 p_i$, revealing unencrypted bootloaders, filesystem boundaries, compressed payloads, and high-entropy encrypted regions.
+          </li>
+          <li>
+            <strong>3. Structural Header Validation</strong>
+            Rather than matching raw 2-byte magic numbers blindly, FirmwareLens validates structural fields (such as SquashFS block logs, uImage CRC/OS/arch enums, LZMA dictionary sizes, and ELF machine headers) to suppress false positives.
+          </li>
+          <li>
+            <strong>4. Security-Focused String Triage</strong>
+            Extracts printable ASCII runs and classifies high-signal artifacts including <code>/etc/shadow</code> hashes, hardcoded credentials, private key headers, Dropbear/Telnetd/BusyBox strings, API tokens, and endpoints.
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Frequently Asked Questions</h2>
+
+        <details class="faq-item" open>
+          <summary>What is entropy analysis in firmware reverse engineering?</summary>
+          <p>Shannon entropy measures byte randomness on a scale from 0 (completely uniform, such as 0x00 or 0xFF flash padding) to 8.0 (uniformly random). Sharp rising edges typically mark transitions from bootloaders or headers into compressed filesystems (SquashFS, LZMA, gzip) or encrypted firmware blobs.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>How is FirmwareLens different from binwalk?</summary>
+          <p>Binwalk is a Python CLI tool that excels at recursive extraction and deep signature scanning on Linux workstations. FirmwareLens provides instant, zero-install visual triage in any browser—combining interactive entropy edge detection, validated header parsing, security string classification, and a hex inspector without uploading sensitive binaries.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Is my firmware uploaded to any server?</summary>
+          <p>No. FirmwareLens is a single static HTML page with zero external network requests. All file reading, SHA-256 hashing (via WebCrypto), signature scanning, and string extraction happen strictly inside your browser's local memory.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>What are the file size limits?</summary>
+          <p>Because the file is streamed in chunks rather than decoded as text, FirmwareLens comfortably handles typical IoT, router, and IP camera dumps up to a few hundred megabytes (typically 256 MB–512 MB depending on available system RAM and browser tab limits).</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Legal and ethical use notice</summary>
+          <p>Only analyse firmware images that you own, hold explicit written authorization to test, or are legally permitted to research under applicable security research laws. Do not use extracted credentials or keys against unauthorized devices or networks.</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      Built by <a href="https://github.com/shrijeetdev" target="_blank" rel="noopener noreferrer">Shrijeet Singh ([github.com/shrijeetdev](https://github.com/shrijeetdev))</a>
+      &middot; <a href="https://github.com/shrijeetdev/firmware-lens" target="_blank" rel="noopener noreferrer">Star on GitHub</a>
+      &middot; <a href="https://shrijeetdev.github.io/" target="_blank" rel="noopener noreferrer">More free tools</a>
+    </div>
+  </footer>
+
+  <script>
+  (() => {
+    "use strict";
+
+    // =========================================================================
+    // 1. INLINE WEB WORKER SOURCE (Created from Blob so UI never freezes)
+    // =========================================================================
+    const workerCode = `
+      "use strict";
+
+      const UIMAGE_OS = {
+        0:"Invalid", 1:"OpenBSD", 2:"NetBSD", 3:"FreeBSD", 4:"4.4BSD",
+        5:"Linux", 6:"SVR4", 7:"Esix", 8:"Solaris", 9:"Irix",
+        10:"SCO", 11:"Dell", 12:"NCR", 13:"LynxOS", 14:"VxWorks",
+        15:"pSOS", 16:"QNX", 17:"Firmware", 18:"RTEMS", 19:"ARTOS",
+        20:"Unity", 21:"INTEGRITY", 22:"OSE", 23:"Plan9", 24:"OpenRTOS"
+      };
+
+      const UIMAGE_ARCH = {
+        0:"Invalid", 1:"Alpha", 2:"ARM", 3:"x86", 4:"IA64", 5:"MIPS",
+        6:"MIPS64", 7:"PowerPC", 8:"S390", 9:"SuperH", 10:"SPARC",
+        11:"SPARC64", 12:"M68K", 13:"Nios-32", 14:"MicroBlaze", 15:"Nios-II",
+        16:"Blackfin", 17:"AVR32", 18:"ST200", 19:"Sandbox", 20:"NDS32",
+        21:"OpenRISC", 22:"ARM64", 23:"ARC", 24:"x86_64", 25:"Xtensa", 26:"RISC-V"
+      };
+
+      const UIMAGE_COMP = {
+        0:"none", 1:"gzip", 2:"bzip2", 3:"lzma", 4:"lzo", 5:"lz4", 6:"zstd"
+      };
+
+      const ELF_MACHINES = {
+        0x00:"No machine", 0x02:"SPARC", 0x03:"x86", 0x08:"MIPS",
+        0x14:"PowerPC", 0x15:"PowerPC64", 0x28:"ARM", 0x2A:"SuperH",
+        0x32:"IA-64", 0x3E:"x86-64", 0xB7:"AArch64", 0xF3:"RISC-V", 0x5E:"Xtensa"
+      };
+
+      function readU16BE(b, o) { return ((b[o] << 8) | b[o + 1]) >>> 0; }
+      function readU16LE(b, o) { return (b[o] | (b[o + 1] << 8)) >>> 0; }
+      function readU32BE(b, o) { return (((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0); }
+      function readU32LE(b, o) { return ((b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0); }
+
+      function hex32(v) {
+        return "0x" + v.toString(16).toUpperCase().padStart(8, "0");
+      }
+
+      function readCString(b, start, maxLen) {
+        let s = "";
+        const end = Math.min(b.length, start + maxLen);
+        for (let i = start; i < end; i++) {
+          const c = b[i];
+          if (c === 0) break;
+          s += (c >= 32 && c <= 126) ? String.fromCharCode(c) : ".";
+        }
+        return s;
+      }
+
+      function matchesAscii(b, off, str) {
+        if (off + str.length > b.length) return false;
+        for (let i = 0; i < str.length; i++) {
+          if (b[off + i] !== str.charCodeAt(i)) return false;
+        }
+        return true;
+      }
+
+      // Compute Shannon entropy from a 256-bin byte frequency array
+      function calcEntropy(counts, total) {
+        if (total === 0) return 0;
+        let h = 0;
+        const inv = 1 / total;
+        for (let i = 0; i < 256; i++) {
+          const c = counts[i];
+          if (c > 0) {
+            const p = c * inv;
+            h -= p * Math.log2(p);
+          }
+        }
+        return h < 0 ? 0 : h;
+      }
+
+      // Validated signature scanner at local buffer index i (representing globalOffset = baseOffset + i)
+      function scanBufferSignatures(buf, baseOffset, scanLimit, totalFileSize, signatures, seenOffsets) {
+        const len = buf.length;
+        for (let i = 0; i < scanLimit; i++) {
+          const absOff = baseOffset + i;
+          const b0 = buf[i];
+
+          // 1. gzip: 1F 8B 08, valid flags (0x00..0x1F) and OS byte
+          if (b0 === 0x1F && i + 10 <= len && buf[i + 1] === 0x8B && buf[i + 2] === 0x08) {
+            const flg = buf[i + 3];
+            const xfl = buf[i + 8];
+            const os = buf[i + 9];
+            if ((flg & 0xE0) === 0 && (xfl === 0 || xfl === 2 || xfl === 4) && (os <= 13 || os === 255)) {
+              const mtime = readU32LE(buf, i + 4);
+              const ts = mtime > 0 ? new Date(mtime * 1000).toISOString().split("T")[0] : "none";
+              let extra = "";
+              if ((flg & 0x08) && i + 11 < len) {
+                const fname = readCString(buf, i + 10, 48);
+                if (fname.length > 0) extra = \`, filename: "\${fname}"\`;
+              }
+              addSig(signatures, seenOffsets, absOff, "gzip compressed data", \`flags: 0x\${flg.toString(16)}, timestamp: \${ts}\${extra}\`);
+            }
+          }
+
+          // 2. LZMA standalone: props < 225, dictSize power-of-2 or common size, uncompressed size valid
+          if ((b0 === 0x5D || b0 === 0x5E || b0 === 0x6D || b0 === 0x6E || b0 === 0x51) && i + 13 <= len) {
+            const props = b0;
+            const lc = props % 9;
+            const rem = (props / 9) | 0;
+            const lp = rem % 5;
+            const pb = (rem / 5) | 0;
+            const dictSize = readU32LE(buf, i + 1);
+            const isPow2 = dictSize >= 4096 && dictSize <= (1 << 28) && ((dictSize & (dictSize - 1)) === 0);
+            const uSizeLo = readU32LE(buf, i + 5);
+            const uSizeHi = readU32LE(buf, i + 9);
+            const streamUnknown = (uSizeLo === 0xFFFFFFFF && uSizeHi === 0xFFFFFFFF);
+            const reasonableSize = (uSizeHi === 0 && uSizeLo > 64 && uSizeLo < 0x40000000);
+            // First compressed byte in LZMA range coder is always 0x00
+            if (isPow2 && (streamUnknown || reasonableSize) && buf[i + 13] === 0x00) {
+              const sizeStr = streamUnknown ? "streamed (unknown)" : \`\${uSizeLo} bytes\`;
+              addSig(signatures, seenOffsets, absOff, "LZMA compressed data", \`lc=\${lc} lp=\${lp} pb=\${pb}, dict: \${(dictSize/1024)|0} KB, uncompressed: \${sizeStr}\`);
+            }
+          }
+
+          // 3. XZ: FD 37 7A 58 5A 00
+          if (b0 === 0xFD && i + 12 <= len && buf[i + 1] === 0x37 && buf[i + 2] === 0x7A && buf[i + 3] === 0x58 && buf[i + 4] === 0x5A && buf[i + 5] === 0x00) {
+            if (buf[i + 6] === 0x00 && (buf[i + 7] & 0xF0) === 0) {
+              const checks = { 0:"None", 1:"CRC32", 4:"CRC64", 10:"SHA-256" };
+              const chk = checks[buf[i + 7] & 0x0F] || \`0x\${buf[i + 7].toString(16)}\`;
+              addSig(signatures, seenOffsets, absOff, "XZ compressed data", \`Stream flags valid, integrity check: \${chk}\`);
+            }
+          }
+
+          // 4. Zstandard: 28 B5 2F FD
+          if (b0 === 0x28 && i + 6 <= len && buf[i + 1] === 0xB5 && buf[i + 2] === 0x2F && buf[i + 3] === 0xFD) {
+            const fhd = buf[i + 4];
+            if ((fhd & 0x08) === 0) { // Reserved bit must be 0
+              addSig(signatures, seenOffsets, absOff, "Zstandard (zstd) compressed data", \`Frame header descriptor: 0x\${fhd.toString(16).padStart(2,"0")}\`);
+            }
+          }
+
+          // 5. bzip2: BZh[1-9] + 31 41 59 26 53 59
+          if (b0 === 0x42 && i + 10 <= len && buf[i + 1] === 0x5A && buf[i + 2] === 0x68 && buf[i + 3] >= 0x31 && buf[i + 3] <= 0x39) {
+            if (buf[i + 4] === 0x31 && buf[i + 5] === 0x41 && buf[i + 6] === 0x59 && buf[i + 7] === 0x26 && buf[i + 8] === 0x53 && buf[i + 9] === 0x59) {
+              const lvl = buf[i + 3] - 0x30;
+              addSig(signatures, seenOffsets, absOff, "bzip2 compressed data", \`block size: \${lvl * 100}k (level \${lvl})\`);
+            }
+          }
+
+          // 6. ZIP local file header: 50 4B 03 04
+          if (b0 === 0x50 && i + 30 <= len && buf[i + 1] === 0x4B && buf[i + 2] === 0x03 && buf[i + 3] === 0x04) {
+            const ver = readU16LE(buf, i + 4);
+            const method = readU16LE(buf, i + 8);
+            const fnLen = readU16LE(buf, i + 26);
+            if (ver >= 10 && ver <= 63 && method <= 99 && fnLen > 0 && fnLen < 256 && i + 30 + fnLen <= len) {
+              const fn = readCString(buf, i + 30, fnLen);
+              addSig(signatures, seenOffsets, absOff, "ZIP archive entry", \`version: \${(ver/10).toFixed(1)}, method: \${method}, file: "\${fn}"\`);
+            }
+          }
+
+          // 7. 7z: 37 7A BC AF 27 1C
+          if (b0 === 0x37 && i + 12 <= len && buf[i + 1] === 0x7A && buf[i + 2] === 0xBC && buf[i + 3] === 0xAF && buf[i + 4] === 0x27 && buf[i + 5] === 0x1C) {
+            addSig(signatures, seenOffsets, absOff, "7-zip archive", \`version \${buf[i + 6]}.\${buf[i + 7]}\`);
+          }
+
+          // 8. SquashFS (LE: hsqs 68 73 71 73 | BE: sqsh 73 71 73 68)
+          if ((b0 === 0x68 || b0 === 0x73) && i + 96 <= len) {
+            const isLE = (b0 === 0x68 && buf[i + 1] === 0x73 && buf[i + 2] === 0x71 && buf[i + 3] === 0x73);
+            const isBE = (b0 === 0x73 && buf[i + 1] === 0x71 && buf[i + 2] === 0x73 && buf[i + 3] === 0x68);
+            if (isLE || isBE) {
+              const inodes = isLE ? readU32LE(buf, i + 4) : readU32BE(buf, i + 4);
+              const blockSize = isLE ? readU32LE(buf, i + 12) : readU32BE(buf, i + 12);
+              const compId = isLE ? readU16LE(buf, i + 20) : readU16BE(buf, i + 20);
+              const blockLog = isLE ? readU16LE(buf, i + 22) : readU16BE(buf, i + 22);
+              const vMajor = isLE ? readU16LE(buf, i + 28) : readU16BE(buf, i + 28);
+              const vMinor = isLE ? readU16LE(buf, i + 30) : readU16BE(buf, i + 30);
+              const compNames = { 1:"gzip", 2:"lzma", 3:"lzo", 4:"xz", 5:"lz4", 6:"zstd" };
+              if (vMajor >= 1 && vMajor <= 4 && blockLog >= 12 && blockLog <= 20 && (1 << blockLog) === blockSize) {
+                const cName = compNames[compId] || \`id:\${compId}\`;
+                addSig(signatures, seenOffsets, absOff, \`SquashFS filesystem (\${isLE ? "little" : "big"} endian)\`, \`version \${vMajor}.\${vMinor}, compression: \${cName}, blocksize: \${blockSize} B, inodes: \${inodes}\`);
+              }
+            }
+          }
+
+          // 9. JFFS2 node magic: 19 85 (LE: 85 19) with valid nodetype 0xE001..0xE009
+          if ((b0 === 0x85 && i + 12 <= len && buf[i + 1] === 0x19) || (b0 === 0x19 && i + 12 <= len && buf[i + 1] === 0x85)) {
+            const isLE = b0 === 0x85;
+            const nodetype = isLE ? readU16LE(buf, i + 2) : readU16BE(buf, i + 2);
+            const totlen = isLE ? readU32LE(buf, i + 4) : readU32BE(buf, i + 4);
+            if (nodetype >= 0xE001 && nodetype <= 0xE009 && totlen >= 12 && totlen <= 0x100000) {
+              // Avoid spamming thousands of sequential JFFS2 nodes within 64KB
+              const lastJffs = signatures.length > 0 ? signatures[signatures.length - 1] : null;
+              if (!lastJffs || !lastJffs.type.startsWith("JFFS2") || (absOff - lastJffs.offset) > 65536) {
+                addSig(signatures, seenOffsets, absOff, \`JFFS2 filesystem (\${isLE ? "little" : "big"} endian)\`, \`nodetype: 0x\${nodetype.toString(16).toUpperCase()}, node length: \${totlen} B\`);
+              }
+            }
+          }
+
+          // 10. UBI EC Header ("UBI#") & UBIFS Superblock (31 18 10 06)
+          if (b0 === 0x55 && i + 64 <= len && buf[i + 1] === 0x42 && buf[i + 2] === 0x49 && buf[i + 3] === 0x23) {
+            if (buf[i + 4] === 1) {
+              const vidOff = readU32BE(buf, i + 16);
+              const dataOff = readU32BE(buf, i + 20);
+              addSig(signatures, seenOffsets, absOff, "UBI erase count header", \`version 1, VID offset: \${vidOff}, data offset: \${dataOff}\`);
+            }
+          }
+          if (b0 === 0x31 && i + 24 <= len && buf[i + 1] === 0x18 && buf[i + 2] === 0x10 && buf[i + 3] === 0x06) {
+            const nodeType = buf[i + 20];
+            if (nodeType === 6) {
+              addSig(signatures, seenOffsets, absOff, "UBIFS superblock node", "Valid UBIFS common header (node_type=6)");
+            }
+          }
+
+          // 11. CramFS (LE: 45 3D CD 28 | BE: 28 CD 3D 45)
+          if ((b0 === 0x45 || b0 === 0x28) && i + 64 <= len) {
+            const isLE = (b0 === 0x45 && buf[i + 1] === 0x3D && buf[i + 2] === 0xCD && buf[i + 3] === 0x28);
+            const isBE = (b0 === 0x28 && buf[i + 1] === 0xCD && buf[i + 2] === 0x3D && buf[i + 3] === 0x45);
+            if (isLE || isBE) {
+              const size = isLE ? readU32LE(buf, i + 4) : readU32BE(buf, i + 4);
+              const sigStr = readCString(buf, i + 16, 16);
+              if (sigStr === "Compressed ROMFS" && size > 64 && size <= totalFileSize) {
+                addSig(signatures, seenOffsets, absOff, \`CramFS filesystem (\${isLE ? "LE" : "BE"})\`, \`size: \${size} bytes, signature: "\${sigStr}"\`);
+              }
+            }
+          }
+
+          // 12. romfs ("-rom1fs-")
+          if (b0 === 0x2D && i + 16 <= len && matchesAscii(buf, i, "-rom1fs-")) {
+            const fullSize = readU32BE(buf, i + 8);
+            const volName = readCString(buf, i + 16, 32);
+            if (fullSize > 16 && fullSize <= totalFileSize) {
+              addSig(signatures, seenOffsets, absOff, "romfs filesystem", \`size: \${fullSize} bytes, volume: "\${volName}"\`);
+            }
+          }
+
+          // 13. cpio newc ("070701" or "070702")
+          if (b0 === 0x30 && i + 110 <= len && (matchesAscii(buf, i, "070701") || matchesAscii(buf, i, "070702"))) {
+            const nameSizeHex = readCString(buf, i + 94, 8);
+            const nameSize = parseInt(nameSizeHex, 16);
+            if (!Number.isNaN(nameSize) && nameSize > 0 && nameSize < 512 && i + 110 + nameSize <= len) {
+              const entryName = readCString(buf, i + 110, nameSize);
+              const lastCpio = signatures.length > 0 ? signatures[signatures.length - 1] : null;
+              if (!lastCpio || !lastCpio.type.startsWith("ASCII cpio") || (absOff - lastCpio.offset) > 65536) {
+                addSig(signatures, seenOffsets, absOff, "ASCII cpio archive (SVR4 newc)", \`first entry: "\${entryName}"\`);
+              }
+            }
+          }
+
+          // 14. U-Boot legacy uImage: 27 05 19 56 (64-byte header)
+          if (b0 === 0x27 && i + 64 <= len && buf[i + 1] === 0x05 && buf[i + 2] === 0x19 && buf[i + 3] === 0x56) {
+            const dataSize = readU32BE(buf, i + 12);
+            const loadAddr = readU32BE(buf, i + 16);
+            const entryAddr = readU32BE(buf, i + 20);
+            const osId = buf[i + 28];
+            const archId = buf[i + 29];
+            const imgType = buf[i + 30];
+            const compId = buf[i + 31];
+            const imgName = readCString(buf, i + 32, 32);
+            if (osId <= 24 && archId <= 26 && compId <= 6 && imgType <= 20) {
+              const osStr = UIMAGE_OS[osId] || \`OS(\${osId})\`;
+              const archStr = UIMAGE_ARCH[archId] || \`Arch(\${archId})\`;
+              const compStr = UIMAGE_COMP[compId] || \`Comp(\${compId})\`;
+              addSig(
+                signatures,
+                seenOffsets,
+                absOff,
+                "U-Boot uImage header",
+                \`name: "\${imgName}", size: \${dataSize} B, load: \${hex32(loadAddr)}, entry: \${hex32(entryAddr)}, OS: \${osStr}, arch: \${archStr}, compression: \${compStr}\`
+              );
+            }
+          }
+
+          // 15. Flattened Device Tree / FIT image: D0 0D FE ED
+          if (b0 === 0xD0 && i + 40 <= len && buf[i + 1] === 0x0D && buf[i + 2] === 0xFE && buf[i + 3] === 0xED) {
+            const totalSize = readU32BE(buf, i + 4);
+            const version = readU32BE(buf, i + 20);
+            if (totalSize >= 40 && totalSize <= 0x10000000 && version >= 1 && version <= 20) {
+              addSig(signatures, seenOffsets, absOff, "Flattened Device Tree (DTB / FIT)", \`total size: \${totalSize} bytes, format version: \${version}\`);
+            }
+          }
+
+          // 16. ELF executable / shared object: 7F 45 4C 46
+          if (b0 === 0x7F && i + 52 <= len && buf[i + 1] === 0x45 && buf[i + 2] === 0x4C && buf[i + 3] === 0x46) {
+            const elfClass = buf[i + 4];
+            const elfData = buf[i + 5];
+            const elfVer = buf[i + 6];
+            if ((elfClass === 1 || elfClass === 2) && (elfData === 1 || elfData === 2) && elfVer === 1) {
+              const isLE = elfData === 1;
+              const eType = isLE ? readU16LE(buf, i + 16) : readU16BE(buf, i + 16);
+              const eMachine = isLE ? readU16LE(buf, i + 18) : readU16BE(buf, i + 18);
+              const types = { 1:"Relocatable", 2:"Executable", 3:"Shared object", 4:"Core" };
+              const tStr = types[eType] || \`type:\${eType}\`;
+              const mStr = ELF_MACHINES[eMachine] || \`machine:0x\${eMachine.toString(16)}\`;
+              addSig(signatures, seenOffsets, absOff, \`ELF \${elfClass === 1 ? "32-bit" : "64-bit"} \${isLE ? "LSB" : "MSB"} \${tStr}\`, \`architecture: \${mStr}\`);
+            }
+          }
+
+          // 17. PE / DOS MZ executable: 4D 5A with valid e_lfanew -> "PE\0\0"
+          if (b0 === 0x4D && i + 64 <= len && buf[i + 1] === 0x5A) {
+            const peOff = readU32LE(buf, i + 60);
+            if (peOff >= 0x40 && peOff <= 0x1000 && i + peOff + 6 <= len) {
+              if (buf[i + peOff] === 0x50 && buf[i + peOff + 1] === 0x45 && buf[i + peOff + 2] === 0x00 && buf[i + peOff + 3] === 0x00) {
+                const mach = readU16LE(buf, i + peOff + 4);
+                const peArch = mach === 0x014c ? "x86" : mach === 0x8664 ? "x64" : mach === 0x01c0 ? "ARM" : mach === 0xaa64 ? "ARM64" : \`0x\${mach.toString(16)}\`;
+                addSig(signatures, seenOffsets, absOff, "Microsoft PE executable", \`machine: \${peArch}, PE header offset: 0x\${peOff.toString(16)}\`);
+              }
+            }
+          }
+
+          // 18. Broadcom TRX header: "HDR0" (48 44 52 30)
+          if (b0 === 0x48 && i + 28 <= len && buf[i + 1] === 0x44 && buf[i + 2] === 0x52 && buf[i + 3] === 0x30) {
+            const trxLen = readU32LE(buf, i + 4);
+            const flags = readU16LE(buf, i + 12);
+            const ver = readU16LE(buf, i + 14);
+            if (trxLen >= 28 && trxLen <= totalFileSize && (ver === 1 || ver === 2)) {
+              const off0 = readU32LE(buf, i + 16);
+              const off1 = readU32LE(buf, i + 20);
+              addSig(signatures, seenOffsets, absOff, "Broadcom TRX firmware header", \`version: \${ver}, length: \${trxLen} B, flags: 0x\${flags.toString(16)}, partitions: [\${hex32(off0)}, \${hex32(off1)}]\`);
+            }
+          }
+
+          // 19. Android Boot Image: "ANDROID!" (41 4E 44 52 4F 49 44 21)
+          if (b0 === 0x41 && i + 48 <= len && matchesAscii(buf, i, "ANDROID!")) {
+            const kSize = readU32LE(buf, i + 8);
+            const rSize = readU32LE(buf, i + 16);
+            const pageSize = readU32LE(buf, i + 36);
+            if (pageSize >= 2048 && pageSize <= 16384 && (pageSize & (pageSize - 1)) === 0) {
+              addSig(signatures, seenOffsets, absOff, "Android boot image", \`kernel: \${kSize} B, ramdisk: \${rSize} B, page size: \${pageSize} B\`);
+            }
+          }
+
+          // 20. PNG image: 89 50 4E 47 0D 0A 1A 0A + IHDR
+          if (b0 === 0x89 && i + 24 <= len && buf[i + 1] === 0x50 && buf[i + 2] === 0x4E && buf[i + 3] === 0x47 &&
+              buf[i + 4] === 0x0D && buf[i + 5] === 0x0A && buf[i + 6] === 0x1A && buf[i + 7] === 0x0A) {
+            if (matchesAscii(buf, i + 12, "IHDR")) {
+              const w = readU32BE(buf, i + 16);
+              const h = readU32BE(buf, i + 20);
+              addSig(signatures, seenOffsets, absOff, "PNG image", \`dimensions: \${w}x\${h}\`);
+            }
+          }
+
+          // 21. JPEG image: FF D8 FF (E0/E1/DB)
+          if (b0 === 0xFF && i + 10 <= len && buf[i + 1] === 0xD8 && buf[i + 2] === 0xFF &&
+              (buf[i + 3] === 0xE0 || buf[i + 3] === 0xE1 || buf[i + 3] === 0xDB)) {
+            addSig(signatures, seenOffsets, absOff, "JPEG image", \`marker: 0xFF\${buf[i + 3].toString(16).toUpperCase()}\`);
+          }
+
+          // 22. GIF image: "GIF87a" or "GIF89a"
+          if (b0 === 0x47 && i + 10 <= len && (matchesAscii(buf, i, "GIF87a") || matchesAscii(buf, i, "GIF89a"))) {
+            const w = readU16LE(buf, i + 6);
+            const h = readU16LE(buf, i + 8);
+            addSig(signatures, seenOffsets, absOff, "GIF image", \`\${readCString(buf, i, 6)}, dimensions: \${w}x\${h}\`);
+          }
+
+          // 23. PEM Certificates & Private Keys
+          if (b0 === 0x2D && i + 26 <= len && matchesAscii(buf, i, "-----BEGIN ")) {
+            const line = readCString(buf, i, 64);
+            if (line.startsWith("-----BEGIN CERTIFICATE-----")) {
+              addSig(signatures, seenOffsets, absOff, "PEM X.509 certificate", "ASCII PEM encoded certificate block");
+            } else if (line.startsWith("-----BEGIN OPENSSH PRIVATE KEY-----")) {
+              addSig(signatures, seenOffsets, absOff, "OpenSSH private key", "Unencrypted or passphrase-protected OpenSSH key");
+            } else if (line.includes("PRIVATE KEY-----")) {
+              addSig(signatures, seenOffsets, absOff, "PEM private key", line);
+            }
+          }
+
+          // 24. ext2 / ext3 / ext4 Superblock (magic 0xEF53 at +0x38 from superblock start, which sits +0x400 into partition)
+          if (b0 === 0x53 && i >= 0x38 && i + 0x40 <= len && buf[i + 1] === 0xEF) {
+            const sbStart = i - 0x38;
+            const sState = readU16LE(buf, sbStart + 0x3A);
+            const sErrors = readU16LE(buf, sbStart + 0x3C);
+            const logBlockSize = readU32LE(buf, sbStart + 0x18);
+            const blocksCount = readU32LE(buf, sbStart + 0x04);
+            if (sState >= 1 && sState <= 3 && sErrors >= 1 && sErrors <= 3 && logBlockSize <= 6 && blocksCount > 0) {
+              const blkSize = 1024 << logBlockSize;
+              const incompat = readU32LE(buf, sbStart + 0x60);
+              const hasJournal = (readU32LE(buf, sbStart + 0x5C) & 0x04) !== 0;
+              const hasExtents = (incompat & 0x40) !== 0;
+              const fsVer = hasExtents ? "ext4" : hasJournal ? "ext3" : "ext2";
+              const volName = readCString(buf, sbStart + 0x78, 16);
+              addSig(signatures, seenOffsets, baseOffset + sbStart, \`Linux \${fsVer} superblock\`, \`block size: \${blkSize} B, blocks: \${blocksCount}\${volName ? \`, label: "\${volName}"\` : ""}\`);
+            }
+          }
+        }
+      }
+
+      function addSig(signatures, seenOffsets, offset, type, details) {
+        if (seenOffsets.has(offset + ":" + type)) return;
+        seenOffsets.add(offset + ":" + type);
+        signatures.push({ offset, type, details });
+      }
+
+      // Classify printable ASCII strings for security triage
+      function classifyString(s) {
+        // Shadow / passwd lines: root:$1$... or admin:x:0:0:...
+        if (/^[a-zA-Z0-9._-]{1,32}:(\\$[1256ay]\\$[^:\\s]{8,}|[x*!]):\\d*:\\d*:/.test(s) ||
+            /^[a-zA-Z0-9._-]{1,32}:\\$[1256ay]\\$[^:\\s]{8,}/.test(s)) {
+          return { category: "CREDENTIALS", tag: "/etc/shadow or passwd entry" };
+        }
+        if (/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/.test(s)) {
+          return { category: "CREDENTIALS", tag: "Private Key Header" };
+        }
+        if (/(?:password|passwd|pwd|secret|wpa_psk|psk|wifi_key|passphrase|default_pass)\\s*[:=]\\s*[^\\s"']{2,}/i.test(s) ||
+            /\\b(admin|root|supervisor|support|ubnt|user)[:/](admin|root|1234|12345|password|default)\\b/i.test(s)) {
+          return { category: "CREDENTIALS", tag: "Credential / Wi-Fi / Default Hint" };
+        }
+        if (/(?:api[_-]?key|access[_-]?token|auth[_-]?token|bearer|aws_secret|AKIA[0-9A-Z]{16})\\s*[:=]?\\s*[A-Za-z0-9_\\-]{8,}/i.test(s)) {
+          return { category: "CREDENTIALS", tag: "API Key / Token" };
+        }
+        if (/https?:\\/\\/[a-zA-Z0-9.-]+(?:\\.[a-zA-Z]{2,}|:\\d+)(?:\\/[^\\s"']*)?/i.test(s)) {
+          return { category: "NETWORK", tag: "Embedded URL" };
+        }
+        if (/\\b(?:(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(?:25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\b/.test(s)) {
+          return { category: "NETWORK", tag: "IPv4 Address" };
+        }
+        if (/\\b(telnetd|dropbear|busybox|sshd|httpd|uhttpd|lighttpd|dnsmasq|wpa_supplicant|hostapd|nvram)\\b/i.test(s)) {
+          return { category: "SYSTEM", tag: "Daemon / Binary Reference" };
+        }
+        return { category: "GENERAL", tag: "ASCII String" };
+      }
+
+      self.onmessage = async (e) => {
+        const msg = e.data;
+        if (msg.type !== "ANALYZE") return;
+
+        const file = msg.file;
+        const blockSize = msg.blockSize || 4096;
+        const totalSize = file.size;
+
+        // Global byte histogram for overall file entropy
+        const globalCounts = new Float64Array(256);
+
+        // Per-block entropy tracking
+        const entropies = [];
+        let curBlockCounts = new Uint32Array(256);
+        let curBlockBytes = 0;
+
+        // Signature scanning with 4KB overlap across 4MB stream chunks
+        const CHUNK_SIZE = 4 * 1024 * 1024;
+        const OVERLAP = 4096;
+        let overlapBuf = new Uint8Array(0);
+        const signatures = [];
+        const seenOffsets = new Set();
+
+        // String extraction state (min 4 chars stored up to cap so UI can adjust minLen live)
+        const MAX_STRINGS = 12000;
+        const strings = [];
+        let curStr = "";
+        let curStrStart = 0;
+
+        let offset = 0;
+        while (offset < totalSize) {
+          const end = Math.min(totalSize, offset + CHUNK_SIZE);
+          const sliceBuf = new Uint8Array(await file.slice(offset, end).arrayBuffer());
+
+          // 1. Update global & block entropy + extract strings in single pass
+          for (let i = 0; i < sliceBuf.length; i++) {
+            const b = sliceBuf[i];
+            globalCounts[b]++;
+            curBlockCounts[b]++;
+            curBlockBytes++;
+
+            if (curBlockBytes === blockSize) {
+              entropies.push(calcEntropy(curBlockCounts, curBlockBytes));
+              curBlockCounts.fill(0);
+              curBlockBytes = 0;
+            }
+
+            if (b >= 32 && b <= 126) {
+              if (curStr.length === 0) curStrStart = offset + i;
+              if (curStr.length < 256) curStr += String.fromCharCode(b);
+            } else {
+              if (curStr.length >= 4) {
+                const cls = classifyString(curStr);
+                if (cls.category !== "GENERAL" || strings.length < MAX_STRINGS) {
+                  if (strings.length < MAX_STRINGS * 1.25) {
+                    strings.push({
+                      offset: curStrStart,
+                      value: curStr,
+                      category: cls.category,
+                      tag: cls.tag
+                    });
+                  }
+                }
+              }
+              curStr = "";
+            }
+          }
+
+          // 2. Signature scanning across combined overlap + current chunk
+          const combined = new Uint8Array(overlapBuf.length + sliceBuf.length);
+          combined.set(overlapBuf, 0);
+          combined.set(sliceBuf, overlapBuf.length);
+          const combinedBase = offset - overlapBuf.length;
+          const isLastChunk = end === totalSize;
+          const scanLimit = isLastChunk ? combined.length : Math.max(0, combined.length - OVERLAP);
+
+          scanBufferSignatures(combined, combinedBase, scanLimit, totalSize, signatures, seenOffsets);
+
+          if (!isLastChunk) {
+            const keep = Math.min(OVERLAP, combined.length);
+            overlapBuf = combined.slice(combined.length - keep);
+          }
+
+          offset = end;
+          self.postMessage({
+            type: "PROGRESS",
+            processed: offset,
+            total: totalSize,
+            stage: "Scanning chunks (entropy, signatures & strings)..."
+          });
+        }
+
+        // Flush trailing partial entropy block & trailing string
+        if (curBlockBytes > 0) {
+          entropies.push(calcEntropy(curBlockCounts, curBlockBytes));
+        }
+        if (curStr.length >= 4 && strings.length < MAX_STRINGS * 1.25) {
+          const cls = classifyString(curStr);
+          strings.push({
+            offset: curStrStart,
+            value: curStr,
+            category: cls.category,
+            tag: cls.tag
+          });
+        }
+
+        const overallEntropy = calcEntropy(globalCounts, totalSize);
+        signatures.sort((a, b) => a.offset - b.offset);
+
+        self.postMessage({
+          type: "COMPLETE",
+          result: {
+            totalSize,
+            blockSize,
+            overallEntropy,
+            entropies: new Float32Array(entropies),
+            signatures,
+            strings
+          }
+        });
+      };
+    `;
+
+    const workerBlob = new Blob([workerCode], { type: "application/javascript" });
+    const workerUrl = URL.createObjectURL(workerBlob);
+    let worker = new Worker(workerUrl);
+
+    // =========================================================================
+    // 2. APPLICATION STATE & DOM REFERENCES
+    // =========================================================================
+    const state = {
+      file: null,
+      fileName: "",
+      sha256: "",
+      result: null,
+      edges: [],
+      hexOffset: 0,
+      hexFocusOffset: null
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const dropzone = $("dropzone");
+    const fileInput = $("fileInput");
+    const browseBtn = $("browseBtn");
+    const sampleBtn = $("sampleBtn");
+    const progressWrap = $("progressWrap");
+    const progressStatus = $("progressStatus");
+    const progressPct = $("progressPct");
+    const progressFill = $("progressFill");
+    const workspace = $("workspace");
+
+    // =========================================================================
+    // 3. SYNTHETIC SAMPLE GENERATOR ("Try a sample")
+    // =========================================================================
+    function buildSyntheticFirmwareSample() {
+      // Total size: 64 KB (65536 bytes) crafted so every panel lights up cleanly
+      const totalSize = 65536;
+      const buf = new Uint8Array(totalSize);
+      buf.fill(0xFF); // Typical erased NOR flash padding (entropy = 0.0)
+
+      function writeBytes(off, arr) {
+        for (let i = 0; i < arr.length && off + i < totalSize; i++) {
+          buf[off + i] = arr[i];
+        }
+      }
+
+      function writeStr(off, str) {
+        for (let i = 0; i < str.length && off + i < totalSize; i++) {
+          buf[off + i] = str.charCodeAt(i);
+        }
+      }
+
+      function writeU32BE(off, val) {
+        buf[off] = (val >>> 24) & 0xFF;
+        buf[off + 1] = (val >>> 16) & 0xFF;
+        buf[off + 2] = (val >>> 8) & 0xFF;
+        buf[off + 3] = val & 0xFF;
+      }
+
+      function writeU32LE(off, val) {
+        buf[off] = val & 0xFF;
+        buf[off + 1] = (val >>> 8) & 0xFF;
+        buf[off + 2] = (val >>> 16) & 0xFF;
+        buf[off + 3] = (val >>> 24) & 0xFF;
+      }
+
+      function writeU16LE(off, val) {
+        buf[off] = val & 0xFF;
+        buf[off + 1] = (val >>> 8) & 0xFF;
+      }
+
+      // 0x00000100: Valid 64-byte U-Boot uImage header
+      const uOff = 0x100;
+      writeBytes(uOff, [0x27, 0x05, 0x19, 0x56]); // IH_MAGIC
+      writeU32BE(uOff + 4, 0x12345678);          // ih_hcrc
+      writeU32BE(uOff + 8, 1700000000);          // ih_time
+      writeU32BE(uOff + 12, 32768);              // ih_size
+      writeU32BE(uOff + 16, 0x80008000);         // ih_load
+      writeU32BE(uOff + 20, 0x80008000);         // ih_ep
+      writeU32BE(uOff + 24, 0x87654321);         // ih_dcrc
+      buf[uOff + 28] = 5;                        // IH_OS_LINUX
+      buf[uOff + 29] = 5;                        // IH_ARCH_MIPS
+      buf[uOff + 30] = 2;                        // IH_TYPE_KERNEL
+      buf[uOff + 31] = 1;                        // IH_COMP_GZIP
+      writeStr(uOff + 32, "OpenWrt-MIPS-24Kc-Sample");
+
+      // 0x00000200: Valid gzip header + compressed-like payload
+      const gzOff = 0x200;
+      writeBytes(gzOff, [0x1F, 0x8B, 0x08, 0x08, 0x60, 0x79, 0x65, 0x65, 0x02, 0x03]);
+      writeStr(gzOff + 10, "vmlinux.bin\0");
+      for (let i = gzOff + 22; i < 0x1000; i++) {
+        buf[i] = (i * 131 + 17) & 0xFF;
+      }
+
+      // 0x00001800: ASCII NVRAM & /etc/shadow / config strings (medium-low entropy)
+      const strRegion = [
+        "BusyBox v1.35.0 (2025-11-04 14:22:08 UTC) multi-call binary",
+        "root:$1$FAKEHASH$999999999999999999999.:0:0:root:/root:/bin/ash",
+        "admin:$6$SAMPLEONLY$NotARealPasswordHashValue000000000000000000000000000000000000000000:0:0:::",
+        "default_password=admin1234",
+        "wpa_psk=SuperSecretSampleWiFiKey2026",
+        "api_key=SAMPLE_IOT_TELEMETRY_KEY_00000000",
+        "http://ota.example.invalid/v2/firmware/manifest.json",
+        "192.168.1.1",
+        "/usr/sbin/telnetd -l /bin/login -p 23",
+        "/usr/sbin/dropbear -R -p 22"
+      ].join("\n");
+      writeStr(0x1800, strRegion);
+
+      // 0x00003000: Valid SquashFS 4.0 Little-Endian Superblock + pseudo-compressed data
+      const sqOff = 0x3000;
+      writeStr(sqOff, "hsqs");
+      writeU32LE(sqOff + 4, 412);          // inodes
+      writeU32LE(sqOff + 8, 1700000100);   // mkfs_time
+      writeU32LE(sqOff + 12, 131072);      // block_size (2^17)
+      writeU32LE(sqOff + 16, 12);          // fragments
+      writeU16LE(sqOff + 20, 4);           // compression = xz
+      writeU16LE(sqOff + 22, 17);          // block_log = 17
+      writeU16LE(sqOff + 28, 4);           // s_major = 4
+      writeU16LE(sqOff + 30, 0);           // s_minor = 0
+
+      // 0x00004000 - 0x0000BFFF: High-entropy CSPRNG block (32 KB, ~7.99 entropy)
+      const randSlice = new Uint8Array(32768);
+      crypto.getRandomValues(randSlice);
+      buf.set(randSlice, 0x4000);
+
+      // 0x0000C800: PEM Certificate header snippet
+      writeStr(0xC800, "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUFAKECERT000000000000000wDQYJKoZIhvcNAQEL\n-----END CERTIFICATE-----\n");
+
+      return new File([buf], "sample_router_fw_v2.4.bin", { type: "application/octet-stream" });
+    }
+
+    // =========================================================================
+    // 4. SHA-256 COMPUTATION (WebCrypto)
+    // =========================================================================
+    async function computeSha256(file) {
+      try {
+        // For files <= 128 MB, hash directly via WebCrypto subtle.digest
+        if (file.size <= 128 * 1024 * 1024) {
+          const ab = await file.arrayBuffer();
+          const hashBuf = await crypto.subtle.digest("SHA-256", ab);
+          return Array.from(new Uint8Array(hashBuf))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+        }
+        return "Skipped (>128 MB single-shot WebCrypto limit)";
+      } catch (err) {
+        return "Unavailable (" + err.message + ")";
+      }
+    }
+
+    // =========================================================================
+    // 5. ANALYSIS PIPELINE
+    // =========================================================================
+    function chooseDefaultBlockSize(size) {
+      if (size <= 131072) return 256;
+      if (size <= 1048576) return 1024;
+      if (size <= 16777216) return 4096;
+      if (size <= 67108864) return 16384;
+      return 65536;
+    }
+
+    function startAnalysis(file, customBlockSize = null) {
+      state.file = file;
+      state.fileName = file.name;
+      state.sha256 = "Computing...";
+
+      const blockSize = customBlockSize || chooseDefaultBlockSize(file.size);
+      $("blockSizeSelect").value = String(blockSize);
+
+      progressWrap.classList.add("active");
+      progressStatus.textContent = `Reading ${file.name}...`;
+      progressPct.textContent = "0%";
+      progressFill.style.width = "0%";
+
+      // Compute SHA-256 concurrently
+      computeSha256(file).then((digest) => {
+        state.sha256 = digest;
+        $("statSha256").textContent = digest;
+      });
+
+      worker.onmessage = (e) => {
+        const msg = e.data;
+        if (msg.type === "PROGRESS") {
+          const pct = msg.total > 0 ? Math.min(100, Math.round((msg.processed / msg.total) * 100)) : 100;
+          progressStatus.textContent = msg.stage;
+          progressPct.textContent = pct + "%";
+          progressFill.style.width = pct + "%";
+        } else if (msg.type === "COMPLETE") {
+          progressStatus.textContent = "Analysis complete";
+          progressPct.textContent = "100%";
+          progressFill.style.width = "100%";
+          setTimeout(() => progressWrap.classList.remove("active"), 600);
+
+          state.result = msg.result;
+          renderAllPanels();
+        }
+      };
+
+      worker.postMessage({
+        type: "ANALYZE",
+        file,
+        blockSize
+      });
+    }
+
+    // =========================================================================
+    // 6. RENDERING: SUMMARY, ENTROPY GRAPH, SIGNATURES, STRINGS, HEX VIEWER
+    // =========================================================================
+    function formatBytes(bytes) {
+      if (bytes === 0) return "0 B";
+      const units = ["B", "KB", "MB", "GB"];
+      const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+      return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2) + " " + units[i];
+    }
+
+    function formatHex(off) {
+      return "0x" + off.toString(16).toUpperCase().padStart(8, "0");
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function renderAllPanels() {
+      const res = state.result;
+      if (!res) return;
+
+      workspace.classList.remove("hidden");
+
+      // Summary card
+      $("fileNameBadge").textContent = state.fileName;
+      $("statSize").textContent = formatBytes(res.totalSize);
+      $("statSizeBytes").textContent = `${res.totalSize.toLocaleString()} bytes`;
+      $("statEntropy").textContent = `${res.overallEntropy.toFixed(4)} / 8.000`;
+      $("statSha256").textContent = state.sha256;
+
+      const highlightedCount = res.strings.filter((s) => s.category !== "GENERAL").length;
+      $("statCounts").textContent = `${res.signatures.length} sigs · ${highlightedCount} alerts`;
+      $("statCountsSub").textContent = `${res.strings.length.toLocaleString()} total ASCII strings`;
+
+      // Encryption / packing heuristic verdict
+      const entArr = res.entropies;
+      let highBlocks = 0;
+      for (let i = 0; i < entArr.length; i++) {
+        if (entArr[i] > 7.5) highBlocks++;
+      }
+      const highRatio = entArr.length > 0 ? highBlocks / entArr.length : 0;
+      const hasKnownCompSig = res.signatures.some((s) =>
+        /gzip|LZMA|XZ|Zstandard|bzip2|SquashFS|CramFS|uImage/i.test(s.type)
+      );
+
+      const vTitle = $("verdictTitle");
+      const vDesc = $("verdictDesc");
+      const vBadge = $("verdictBadge");
+
+      if (res.overallEntropy > 7.75 && highRatio > 0.85 && !hasKnownCompSig) {
+        vTitle.textContent = "Likely Encrypted / Obfuscated: YES";
+        vDesc.textContent = `Uniformly extreme entropy (${res.overallEntropy.toFixed(3)}, ${(highRatio * 100).toFixed(0)}% of blocks > 7.5) with no standard cleartext container headers detected.`;
+        vBadge.textContent = "LIKELY ENCRYPTED";
+        vBadge.className = "badge badge-danger";
+      } else if (highRatio > 0.35 && hasKnownCompSig) {
+        vTitle.textContent = "Likely Encrypted: NO (Compressed Payload Detected)";
+        vDesc.textContent = `High-entropy regions (${(highRatio * 100).toFixed(0)}% of blocks > 7.5) correlate with validated compression/filesystem headers (e.g., SquashFS, gzip, or LZMA).`;
+        vBadge.textContent = "COMPRESSED / UNPACKABLE";
+        vBadge.className = "badge badge-accent";
+      } else if (highRatio > 0.35 && !hasKnownCompSig) {
+        vTitle.textContent = "Likely Encrypted: PARTIAL / MIXED";
+        vDesc.textContent = `${(highRatio * 100).toFixed(0)}% of blocks exceed 7.5 bits/byte without standard compression magic—contains either encrypted partitions or raw compressed streams without framing.`;
+        vBadge.textContent = "MIXED / HIGH ENTROPY";
+        vBadge.className = "badge badge-warn";
+      } else {
+        vTitle.textContent = "Likely Encrypted: NO (Cleartext / Uncompressed)";
+        vDesc.textContent = `Overall entropy is ${res.overallEntropy.toFixed(3)} bits/byte with substantial cleartext code, strings, or flash padding visible.`;
+        vBadge.textContent = "CLEARTEXT";
+        vBadge.className = "badge badge-info";
+      }
+
+      // Entropy graph & edges
+      computeAndRenderEdges();
+      drawEntropyCanvas();
+
+      // Signatures & Strings
+      renderSignaturesTable();
+      renderStringsTable();
+
+      // Hex viewer at first signature or 0x0
+      const initialOffset = res.signatures.length > 0 ? res.signatures[0].offset : 0;
+      loadHexWindow(initialOffset, initialOffset);
+    }
+
+    // -------------------------------------------------------------------------
+    // Panel 1: Entropy Edges & Canvas Chart
+    // -------------------------------------------------------------------------
+    function computeAndRenderEdges() {
+      const res = state.result;
+      const arr = res.entropies;
+      const edges = [];
+      const THRESHOLD = 2.2;
+
+      for (let i = 1; i < arr.length; i++) {
+        const delta = arr[i] - arr[i - 1];
+        if (Math.abs(delta) >= THRESHOLD) {
+          edges.push({
+            type: delta > 0 ? "RISING" : "FALLING",
+            offset: i * res.blockSize,
+            fromVal: arr[i - 1],
+            toVal: arr[i],
+            delta
+          });
+        }
+      }
+      state.edges = edges;
+      $("blockCountBadge").textContent = `${arr.length.toLocaleString()} blocks (${formatBytes(res.blockSize)})`;
+
+      const container = $("edgeChips");
+      container.innerHTML = "";
+      if (edges.length === 0) {
+        container.innerHTML = `<span style="color:var(--muted); font-size:0.82rem;">No sharp entropy transitions (&Delta; &ge; 2.2) detected at this block size.</span>`;
+        return;
+      }
+
+      edges.slice(0, 60).forEach((edge) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "edge-chip";
+        const arrow = edge.type === "RISING" ? "↗" : "↘";
+        const color = edge.type === "RISING" ? "var(--danger)" : "var(--accent)";
+        btn.innerHTML = `<span style="color:${color}; font-weight:700;">${arrow} ${edge.type}</span> <span>${formatHex(edge.offset)}</span> <span style="color:var(--muted);">(${edge.fromVal.toFixed(1)}→${edge.toVal.toFixed(1)})</span>`;
+        btn.addEventListener("click", () => {
+          loadHexWindow(edge.offset, edge.offset);
+          $("hexCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    function drawEntropyCanvas(hoverIndex = -1) {
+      const canvas = $("entropyCanvas");
+      const container = $("canvasContainer");
+      const res = state.result;
+      if (!res || !canvas) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      const rect = container.getBoundingClientRect();
+      const width = Math.max(300, Math.floor(rect.width));
+      const height = Math.max(180, Math.floor(rect.height));
+
+      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+      }
+
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const padL = 42;
+      const padR = 14;
+      const padT = 14;
+      const padB = 26;
+      const plotW = width - padL - padR;
+      const plotH = height - padT - padB;
+
+      ctx.clearRect(0, 0, width, height);
+
+      // Entropy colour bands
+      const yMax = 8.0;
+      const yToPx = (val) => padT + plotH - (val / yMax) * plotH;
+
+      // High band: 6.8 - 8.0
+      ctx.fillStyle = "rgba(248, 81, 73, 0.10)";
+      ctx.fillRect(padL, yToPx(8.0), plotW, yToPx(6.8) - yToPx(8.0));
+
+      // Medium band: 3.5 - 6.8
+      ctx.fillStyle = "rgba(21, 224, 237, 0.08)";
+      ctx.fillRect(padL, yToPx(6.8), plotW, yToPx(3.5) - yToPx(6.8));
+
+      // Low band: 0.0 - 3.5
+      ctx.fillStyle = "rgba(63, 185, 80, 0.08)";
+      ctx.fillRect(padL, yToPx(3.5), plotW, yToPx(0.0) - yToPx(3.5));
+
+      // Horizontal grid lines & Y-axis labels
+      ctx.strokeStyle = "rgba(139, 148, 158, 0.25)";
+      ctx.lineWidth = 1;
+      ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = "#8B949E";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+
+      [0, 2, 3.5, 5, 6.8, 8].forEach((val) => {
+        const y = Math.round(yToPx(val)) + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(padL + plotW, y);
+        ctx.stroke();
+        ctx.fillText(val.toFixed(1), padL - 6, y);
+      });
+
+      // X-axis offset ticks
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      for (let t = 0; t <= 4; t++) {
+        const ratio = t / 4;
+        const x = padL + ratio * plotW;
+        const off = Math.floor(ratio * res.totalSize);
+        ctx.fillText("0x" + off.toString(16).toUpperCase(), x, padT + plotH + 7);
+      }
+
+      // Plot entropy curve (downsample if > plotW * 2 points for crisp rendering)
+      const data = res.entropies;
+      const n = data.length;
+      if (n === 0) return;
+
+      ctx.beginPath();
+      ctx.strokeStyle = "#15E0ED";
+      ctx.lineWidth = 1.75;
+
+      if (n === 1) {
+        const y = yToPx(data[0]);
+        ctx.moveTo(padL, y);
+        ctx.lineTo(padL + plotW, y);
+      } else {
+        const step = Math.max(1, Math.floor(n / (plotW * 2)));
+        let first = true;
+        for (let i = 0; i < n; i += step) {
+          const x = padL + (i / (n - 1)) * plotW;
+          const y = yToPx(data[i]);
+          if (first) {
+            ctx.moveTo(x, y);
+            first = false;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        // Ensure last point is plotted
+        ctx.lineTo(padL + plotW, yToPx(data[n - 1]));
+      }
+      ctx.stroke();
+
+      // Hover crosshair
+      if (hoverIndex >= 0 && hoverIndex < n) {
+        const hx = n === 1 ? padL : padL + (hoverIndex / (n - 1)) * plotW;
+        const hy = yToPx(data[hoverIndex]);
+
+        ctx.strokeStyle = "#E6EDF3";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(hx, padT);
+        ctx.lineTo(hx, padT + plotH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = "#3FB950";
+        ctx.beginPath();
+        ctx.arc(hx, hy, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Canvas hover & click interactions
+    (() => {
+      const container = $("canvasContainer");
+      const tooltip = $("canvasTooltip");
+
+      function getBlockIndexFromEvent(e) {
+        const res = state.result;
+        if (!res || res.entropies.length === 0) return -1;
+        const rect = container.getBoundingClientRect();
+        const padL = 42;
+        const padR = 14;
+        const plotW = rect.width - padL - padR;
+        const relX = Math.max(0, Math.min(plotW, e.clientX - rect.left - padL));
+        const ratio = plotW > 0 ? relX / plotW : 0;
+        return Math.min(res.entropies.length - 1, Math.floor(ratio * res.entropies.length));
+      }
+
+      container.addEventListener("mousemove", (e) => {
+        const idx = getBlockIndexFromEvent(e);
+        if (idx < 0) return;
+        const res = state.result;
+        const off = idx * res.blockSize;
+        const val = res.entropies[idx];
+
+        drawEntropyCanvas(idx);
+
+        tooltip.style.display = "block";
+        tooltip.textContent = `Offset: ${formatHex(off)} (${off.toLocaleString()}) | Entropy: ${val.toFixed(4)}`;
+
+        const rect = container.getBoundingClientRect();
+        let left = e.clientX - rect.left + 12;
+        if (left + tooltip.offsetWidth > rect.width - 8) {
+          left = e.clientX - rect.left - tooltip.offsetWidth - 12;
+        }
+        tooltip.style.left = Math.max(8, left) + "px";
+        tooltip.style.top = "10px";
+      });
+
+      container.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+        drawEntropyCanvas(-1);
+      });
+
+      container.addEventListener("click", (e) => {
+        const idx = getBlockIndexFromEvent(e);
+        if (idx < 0) return;
+        const off = idx * state.result.blockSize;
+        loadHexWindow(off, off);
+        $("hexCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+
+      window.addEventListener("resize", () => {
+        if (state.result) drawEntropyCanvas(-1);
+      });
+    })();
+
+    // -------------------------------------------------------------------------
+    // Panel 2: Signatures Table
+    // -------------------------------------------------------------------------
+    function renderSignaturesTable() {
+      const res = state.result;
+      if (!res) return;
+      const query = $("sigFilterInput").value.trim().toLowerCase();
+      const tbody = $("sigTableBody");
+
+      const filtered = res.signatures.filter((s) =>
+        !query ||
+        s.type.toLowerCase().includes(query) ||
+        s.details.toLowerCase().includes(query) ||
+        formatHex(s.offset).toLowerCase().includes(query)
+      );
+
+      $("sigCountBadge").textContent = `${filtered.length} hit${filtered.length === 1 ? "" : "s"}`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No matching validated signatures found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map((s) => `
+        <tr>
+          <td><button type="button" class="offset-link" data-offset="${s.offset}">${formatHex(s.offset)}</button></td>
+          <td class="mono" style="color:var(--muted);">${s.offset.toLocaleString()}</td>
+          <td><strong>${escapeHtml(s.type)}</strong></td>
+          <td style="color:var(--muted);">${escapeHtml(s.details)}</td>
+        </tr>
+      `).join("");
+    }
+
+    // -------------------------------------------------------------------------
+    // Panel 3: Interesting Strings Table
+    // -------------------------------------------------------------------------
+    function renderStringsTable() {
+      const res = state.result;
+      if (!res) return;
+
+      const minLen = Math.max(4, parseInt($("minStrLen").value, 10) || 6);
+      const catFilter = $("strCategoryFilter").value;
+      const search = $("strSearchInput").value.trim().toLowerCase();
+      const tbody = $("strTableBody");
+
+      const filtered = [];
+      for (let i = 0; i < res.strings.length; i++) {
+        const item = res.strings[i];
+        if (item.value.length < minLen) continue;
+        if (catFilter === "HIGHLIGHTED" && item.category === "GENERAL") continue;
+        if (catFilter !== "ALL" && catFilter !== "HIGHLIGHTED" && item.category !== catFilter) continue;
+        if (search && !item.value.toLowerCase().includes(search) && !item.tag.toLowerCase().includes(search)) continue;
+        filtered.push(item);
+        if (filtered.length >= 500) break; // Keep DOM snappy
+      }
+
+      $("strCountBadge").textContent = `${filtered.length}${filtered.length === 500 ? "+" : ""} shown`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="empty-state">No extracted strings match the current filters.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map((item) => {
+        let badgeCls = "badge";
+        if (item.category === "CREDENTIALS") badgeCls = "badge badge-danger";
+        else if (item.category === "NETWORK") badgeCls = "badge badge-info";
+        else if (item.category === "SYSTEM") badgeCls = "badge badge-warn";
+
+        return `
+          <tr>
+            <td><button type="button" class="offset-link" data-offset="${item.offset}">${formatHex(item.offset)}</button></td>
+            <td><span class="${badgeCls}">${escapeHtml(item.tag)}</span></td>
+            <td class="string-preview">${escapeHtml(item.value)}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    // Delegate offset clicks from signature and string tables to Hex Inspector
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest(".offset-link");
+      if (!btn) return;
+      const off = parseInt(btn.getAttribute("data-offset"), 10);
+      if (!Number.isNaN(off)) {
+        loadHexWindow(off, off);
+        $("hexCard").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // Panel 4: 256-Byte Hex & ASCII Viewer
+    // -------------------------------------------------------------------------
+    async function loadHexWindow(targetOffset, focusOffset = null) {
+      if (!state.file) return;
+      const total = state.file.size;
+      // Align start to 16-byte boundary while keeping targetOffset visible
+      const aligned = Math.max(0, Math.min(Math.max(0, total - 16), Math.floor(targetOffset / 16) * 16));
+      state.hexOffset = aligned;
+      state.hexFocusOffset = focusOffset;
+
+      $("hexOffsetBadge").textContent = `${formatHex(aligned)} – ${formatHex(Math.min(total, aligned + 256))}`;
+
+      const slice = state.file.slice(aligned, Math.min(total, aligned + 256));
+      const bytes = new Uint8Array(await slice.arrayBuffer());
+
+      let offsetHtml = `<div class="hex-col-header">OFFSET</div>`;
+      let hexHtml = `<div class="hex-col-header">00 01 02 03 04 05 06 07  08 09 0A 0B 0C 0D 0E 0F</div>`;
+      let asciiHtml = `<div class="hex-col-header">ASCII</div>`;
+
+      for (let row = 0; row < bytes.length; row += 16) {
+        const rowAddr = aligned + row;
+        offsetHtml += `<div class="hex-row" style="color:var(--muted);">${formatHex(rowAddr)}</div>`;
+
+        let hexLine = "";
+        let asciiLine = "";
+
+        for (let col = 0; col < 16; col++) {
+          if (col === 8) hexLine += " ";
+          if (row + col < bytes.length) {
+            const b = bytes[row + col];
+            const absAddr = rowAddr + col;
+            const hexStr = b.toString(16).toUpperCase().padStart(2, "0");
+
+            let cls = "";
+            if (b === 0x00 || b === 0xFF) cls = "hex-byte-zero";
+            else if (b >= 32 && b <= 126) cls = "hex-byte-print";
+            else cls = "hex-byte-high";
+
+            if (focusOffset !== null && absAddr >= focusOffset && absAddr < focusOffset + 4) {
+              cls += " hex-byte-focus";
+            }
+
+            hexLine += `<span class="${cls}">${hexStr}</span> `;
+            const ch = (b >= 32 && b <= 126) ? escapeHtml(String.fromCharCode(b)) : ".";
+            asciiLine += (b >= 32 && b <= 126) ? `<span class="hex-byte-print">${ch}</span>` : `<span class="hex-byte-zero">.</span>`;
+          } else {
+            hexLine += "   ";
+            asciiLine += " ";
+          }
+        }
+
+        hexHtml += `<div class="hex-row">${hexLine}</div>`;
+        asciiHtml += `<div class="hex-row">${asciiLine}</div>`;
+      }
+
+      $("hexViewer").innerHTML = `
+        <div>${offsetHtml}</div>
+        <div>${hexHtml}</div>
+        <div class="hex-ascii-col">${asciiHtml}</div>
+      `;
+    }
+
+    // =========================================================================
+    // 7. EXPORT REPORTS (JSON & MARKDOWN)
+    // =========================================================================
+    function downloadTextFile(filename, content, mimeType) {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function exportJsonReport() {
+      const res = state.result;
+      if (!res) return;
+      const report = {
+        tool: "FirmwareLens",
+        author: "Shrijeet Singh (https://github.com/shrijeetdev/firmware-lens)",
+        generatedAt: new Date().toISOString(),
+        file: {
+          name: state.fileName,
+          sizeBytes: res.totalSize,
+          sha256: state.sha256,
+          overallEntropy: Number(res.overallEntropy.toFixed(4)),
+          entropyBlockSize: res.blockSize,
+          verdict: $("verdictTitle").textContent
+        },
+        entropyEdges: state.edges.map((e) => ({
+          type: e.type,
+          offsetHex: formatHex(e.offset),
+          offsetDec: e.offset,
+          fromEntropy: Number(e.fromVal.toFixed(3)),
+          toEntropy: Number(e.toVal.toFixed(3))
+        })),
+        signatures: res.signatures.map((s) => ({
+          offsetHex: formatHex(s.offset),
+          offsetDec: s.offset,
+          type: s.type,
+          details: s.details
+        })),
+        highlightedStrings: res.strings
+          .filter((s) => s.category !== "GENERAL")
+          .slice(0, 500)
+          .map((s) => ({
+            offsetHex: formatHex(s.offset),
+            offsetDec: s.offset,
+            category: s.category,
+            tag: s.tag,
+            value: s.value
+          }))
+      };
+
+      downloadTextFile(
+        `${state.fileName}.firmwarelens.json`,
+        JSON.stringify(report, null, 2),
+        "application/json"
+      );
+    }
+
+    function exportMarkdownReport() {
+      const res = state.result;
+      if (!res) return;
+      const highlights = res.strings.filter((s) => s.category !== "GENERAL").slice(0, 200);
+
+      const lines = [
+        `# FirmwareLens Triage Report: \`${state.fileName}\``,
+        ``,
+        `- **Generated:** ${new Date().toISOString()}`,
+        `- **File Size:** ${formatBytes(res.totalSize)} (${res.totalSize.toLocaleString()} bytes)`,
+        `- **SHA-256:** \`${state.sha256}\``,
+        `- **Overall Shannon Entropy:** ${res.overallEntropy.toFixed(4)} / 8.000 (Block size: ${formatBytes(res.blockSize)})`,
+        `- **Assessment:** ${$("verdictTitle").textContent} — ${$("verdictDesc").textContent}`,
+        ``,
+        `## Validated Signatures (${res.signatures.length})`,
+        ``,
+        `| Hex Offset | Decimal | Format | Header Metadata |`,
+        `| --- | --- | --- | --- |`,
+        ...res.signatures.map((s) => `| \`${formatHex(s.offset)}\` | ${s.offset} | ${s.type} | ${s.details.replace(/\|/g, "\\|")} |`),
+        ``,
+        `## Highlighted Security Strings (${highlights.length})`,
+        ``,
+        `| Hex Offset | Classification | String |`,
+        `| --- | --- | --- |`,
+        ...highlights.map((s) => `| \`${formatHex(s.offset)}\` | ${s.tag} | \`${s.value.replace(/`/g, "'").replace(/\|/g, "\\|")}\` |`),
+        ``,
+        `---`,
+        `*Generated locally in browser with [FirmwareLens](https://shrijeetdev.github.io/firmware-lens/).*`
+      ];
+
+      downloadTextFile(
+        `${state.fileName}.firmwarelens.md`,
+        lines.join("\n"),
+        "text/markdown"
+      );
+    }
+
+    // =========================================================================
+    // 8. EVENT WIRING
+    // =========================================================================
+    browseBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+
+    sampleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const sampleFile = buildSyntheticFirmwareSample();
+      startAnalysis(sampleFile, 256);
+    });
+
+    dropzone.addEventListener("click", () => fileInput.click());
+
+    dropzone.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    });
+
+    dropzone.addEventListener("dragleave", () => {
+      dropzone.classList.remove("dragover");
+    });
+
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        startAnalysis(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files && fileInput.files[0]) {
+        startAnalysis(fileInput.files[0]);
+      }
+    });
+
+    $("blockSizeSelect").addEventListener("change", (e) => {
+      if (!state.file) return;
+      const newSize = parseInt(e.target.value, 10);
+      startAnalysis(state.file, newSize);
+    });
+
+    $("sigFilterInput").addEventListener("input", renderSignaturesTable);
+    $("minStrLen").addEventListener("input", renderStringsTable);
+    $("strCategoryFilter").addEventListener("change", renderStringsTable);
+    $("strSearchInput").addEventListener("input", renderStringsTable);
+
+    $("hexPrevBtn").addEventListener("click", () => {
+      loadHexWindow(Math.max(0, state.hexOffset - 256), null);
+    });
+
+    $("hexNextBtn").addEventListener("click", () => {
+      if (!state.file) return;
+      loadHexWindow(Math.min(Math.max(0, state.file.size - 16), state.hexOffset + 256), null);
+    });
+
+    function handleHexJump() {
+      if (!state.file) return;
+      const raw = $("hexJumpInput").value.trim();
+      if (!raw) return;
+      const parsed = raw.toLowerCase().startsWith("0x") ? parseInt(raw, 16) : parseInt(raw, 10);
+      if (!Number.isNaN(parsed) && parsed >= 0 && parsed < state.file.size) {
+        loadHexWindow(parsed, parsed);
+      }
+    }
+
+    $("hexJumpBtn").addEventListener("click", handleHexJump);
+    $("hexJumpInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleHexJump();
+    });
+
+    $("exportJsonBtn").addEventListener("click", exportJsonReport);
+    $("exportMdBtn").addEventListener("click", exportMarkdownReport);
+  })();
+  </script>
+</body>
+</html>
